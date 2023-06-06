@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dog Jumps</title>
+
+    <style>
+      .game-row {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+      }
+
+      .game-cell {
+        border: 2px solid black;
+        border-radius: 30%;
+        margin: 2px;
+        padding: 20px;
+        /* background-color: black; */
+      }
+
+      .game-cell div {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+      }
+
+      .selected-cell {
+        background-color: rgba(225, 213, 40, 0.218) !important;
+      }
+
+      .available-pos {
+        background-color: rgba(33, 181, 7, 0.36) !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      style="
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        align-items: center;
+      "
+    >
+      <div style="text-align: center" id="header">
+        <h1>Dog Jumps</h1>
+        <p id="turn"></p>
+        <div
+          style="
+            text-align: left;
+            border-radius: 2px;
+            background-color: rgb(182, 170, 170);
+            font-weight: bold;
+            padding: 7px;
+            position: absolute;
+            top: 10%;
+            left: 2%;
+            font-size: small;
+          "
+        >
+          <div>green: <span id="greenUser" style="color: green"></span></div>
+          <div>red: <span id="redUser" style="color: red"></span></div>
+        </div>
+      </div>
+      <div id="game"></div>
+      <div>
+        <p>made by @MohammadAzhari</p>
+      </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      const collorsOfCells = {
+        a: 'red',
+        b: 'green',
+        '-': '',
+      };
+
+      const opposite = {
+        a: 'b',
+        b: 'a',
+      };
+      const urlPaths = window.location.href.split('/');
+      const gameId = urlPaths[urlPaths.length - 1];
+      const socket = io('/game');
+      let userTurn;
+
+      // recive socket events:
+      socket.on('startGame', ({ users, elements: newEl }) => {
+        // save the elements array:
+        elements = newEl;
+        // we have two users array , we need to know if our user is
+        for (let key in users) {
+          if (users[key] !== localStorage.getItem('userName')) {
+            document.getElementById(collorsOfCells[key] + 'User').innerHTML =
+              users[key];
+          } else {
+            document.getElementById(collorsOfCells[key] + 'User').innerHTML =
+              'You';
+            userTurn = key;
+          }
+        }
+        renderGameBox();
+      });
+
+      socket.on('moveTurn', (response) => {
+        elements = response.elements;
+        state.turn = response.turn;
+        renderGameBox();
+      });
+
+      function main() {
+        socket.emit('startGame', gameId);
+      }
+
+      const gameContainer = document.getElementById('game');
+
+      let elements = [[]];
+
+      const state = {
+        turn: 'b',
+        clickedPos: '',
+        availableMovesPos: new Set(),
+        bindingMove: false,
+      };
+
+      function renderGameBox() {
+        let greenWinnes = true,
+          redWinnes = true;
+        document.getElementById('turn').innerHTML =
+          collorsOfCells[state.turn] + ' Plays';
+        gameContainer.innerHTML = '';
+        for (let i = 0; i < elements.length; i++) {
+          const rowNode = document.createElement('div');
+          rowNode.classList.add('game-row');
+
+          for (let j = 0; j < elements[i].length; j++) {
+            const curPos = `${i}${j}`;
+            const cell = document.createElement('div');
+
+            if (curPos === state.clickedPos) {
+              cell.classList.add('selected-cell');
+            }
+            if (state.availableMovesPos.has(curPos)) {
+              cell.classList.add('available-pos');
+            }
+
+            switch (elements[i][j]) {
+              case 'a':
+                greenWinnes = false;
+                break;
+              case 'b':
+                redWinnes = false;
+                break;
+              default:
+            }
+
+            cell.classList.add('game-cell');
+            cell.addEventListener('click', () => handleClickCell(curPos));
+            cell.innerHTML = `
+          <div
+            style='background-color: ${collorsOfCells[elements[i][j]]}'
+          ></div> `;
+            rowNode.appendChild(cell);
+          }
+          gameContainer.appendChild(rowNode);
+        }
+        let winner = greenWinnes ? 'b' : redWinnes ? 'a' : '';
+        if (winner) {
+          gameContainer.innerHTML = `
+            ${collorsOfCells[winner]} wins!
+          `;
+        }
+      }
+
+      function handleClickCell(pos) {
+        let i = Number(pos[0]),
+          j = Number(pos[1]);
+        if (
+          elements[i][j] === '-' &&
+          state.clickedPos !== '' &&
+          userTurn === state.turn
+        ) {
+          console.log({
+            gameId,
+            from: state.clickedPos,
+            to: pos,
+          });
+          socket.emit('moveTurn', {
+            gameId,
+            from: state.clickedPos,
+            to: pos,
+          });
+        }
+        state.availableMovesPos = new Set();
+        if (userTurn === elements[i][j] && userTurn === state.turn) {
+          state.clickedPos = pos;
+          getAvailbaleMoves(i, j);
+        }
+        renderGameBox();
+      }
+
+      function getAvailbaleMoves(i, j) {
+        for (let [x, y] of [
+          [i + 1, j],
+          [i - 1, j],
+          [i, j + 1],
+          [i, j - 1],
+        ]) {
+          if (
+            x >= 0 &&
+            y >= 0 &&
+            x < elements.length &&
+            y < elements[0].length &&
+            elements[x][y] === '-' &&
+            !state.bindingMove
+          ) {
+            state.availableMovesPos.add(`${x}${y}`);
+          }
+        }
+      }
+
+      main();
+    </script>
+  </body>
+</html>

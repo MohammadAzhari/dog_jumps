@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dog Jumps - Home</title>
+  </head>
+  <body>
+    <div
+      style="
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        align-items: center;
+      "
+    >
+      <div style="text-align: center" id="header">
+        <h1>Dog Jumps</h1>
+      </div>
+      <div id="content">
+        <input
+          value=""
+          placeholder="enter your name"
+          id="name_input"
+          style="border-radius: 3px; padding: 6px"
+        />
+        <button
+          id="join_btn"
+          style="
+            padding: 6px;
+            background-color: green;
+            color: rgb(255, 255, 255);
+            border-radius: 8px;
+          "
+        >
+          join game
+        </button>
+      </div>
+      <div>
+        <p>made by @MohammadAzhari</p>
+      </div>
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      const contentDiv = document.getElementById('content');
+      const btn = document.getElementById('join_btn');
+      let name = '';
+      let searched = false;
+      btn.addEventListener('click', handleClickSearchingForGame);
+
+      const socket = io();
+
+      function handleClickSearchingForGame() {
+        name = document.getElementById('name_input').value;
+        localStorage.setItem('userName', name);
+
+        if (!searched) {
+          socket.emit('getOnlineUsers');
+        }
+        searched = true;
+      }
+      function handleClickJoinGame(gameObj) {
+        socket.emit('joinGame', {
+          gameObj,
+          userName: name,
+        });
+      }
+
+      socket.on('getOnlineUsers', ({ onlineUsers }) => {
+        contentDiv.innerHTML = '';
+        if (name !== '' && onlineUsers.length === 0) {
+          socket.emit('waitingForGame', name);
+          contentDiv.innerHTML = 'waiting for game';
+        }
+        for (let gameObj of onlineUsers) {
+          const joinGameBtn = document.createElement('button');
+          joinGameBtn.addEventListener('click', () =>
+            handleClickJoinGame(gameObj)
+          );
+          contentDiv.innerHTML += `
+                <span>
+                    ${gameObj.userName} - 
+                </span>
+            `;
+          joinGameBtn.innerText = 'join game now';
+          contentDiv.appendChild(joinGameBtn);
+        }
+      });
+
+      socket.on('joinGame', ({ gameId }) => {
+        window.location.href = '/game/' + gameId;
+      });
+    </script>
+  </body>
+</html>
